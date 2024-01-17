@@ -32,10 +32,11 @@ const (
 
 // Server encapsulates a GCE Instance.
 type Server struct {
-	context   *context.Context
-	projectID string
-	service   *compute.Service
-	instance  *compute.Instance
+	context      *context.Context
+	projectID    string
+	vpcProjectID string
+	service      *compute.Service
+	instance     *compute.Instance
 	Remote
 }
 
@@ -72,7 +73,8 @@ func NewServer(ctx context.Context, bs *BuilderServer) *Server {
 		log.Fatalf("Cannot create new server without project ID: %+v", err)
 		return nil
 	}
-	s := &Server{projectID: projectID}
+	s := &Server{projectID: projectID, vpcProjectID: *bs.NetworkProjectId}
+	log.Printf("ProjectID: %s, VPCProjectID: %s", s.projectID, s.vpcProjectID)
 
 	log.Printf("Starting GCE service in project %s", projectID)
 	err = s.newGCEService(ctx)
@@ -169,6 +171,15 @@ func (s *Server) newInstance(bs *BuilderServer) error {
 		}
 	}
 
+	var projectNetwork string
+	if s.vpcProjectID == "" {
+		projectNetwork = s.projectID
+	} else {
+		projectNetwork = s.vpcProjectID
+	}
+
+	log.Printf("Project Network: %s", projectNetwork)
+
 	instance := &compute.Instance{
 		Name:        name,
 		MachineType: prefix + s.projectID + "/zones/" + *bs.Zone + "/machineTypes/" + machineType,
@@ -196,8 +207,8 @@ func (s *Server) newInstance(bs *BuilderServer) error {
 		NetworkInterfaces: []*compute.NetworkInterface{
 			&compute.NetworkInterface{
 				AccessConfigs: accessConfigs,
-				Network:    prefix + s.projectID + "/global/networks/" + *bs.VPC,
-				Subnetwork: prefix + s.projectID + "/regions/" + *bs.Region + "/subnetworks/" + *bs.Subnet,
+				Network:       prefix + projectNetwork + "/global/networks/" + *bs.VPC,
+				Subnetwork:    prefix + projectNetwork + "/regions/" + *bs.Region + "/subnetworks/" + *bs.Subnet,
 			},
 		},
 		ServiceAccounts: []*compute.ServiceAccount{
@@ -212,7 +223,7 @@ func (s *Server) newInstance(bs *BuilderServer) error {
 		Scheduling: &compute.Scheduling{
 			Preemptible: *bs.Preemptible,
 		},
-		Tags: &compute.Tags {
+		Tags: &compute.Tags{
 			Items: bs.GetTags(),
 		},
 	}
@@ -261,7 +272,7 @@ func (s *Server) DeleteInstance(bs *BuilderServer) error {
 }
 
 // getInternalIP gets an internal IP for an instance.
-func(s *Server) getInternalIP(bs *BuilderServer) (string, error) {
+func (s *Server) getInternalIP(bs *BuilderServer) (string, error) {
 	err := s.refreshInstance(bs)
 	if err != nil {
 		log.Printf("Error refreshing instance: %+v", err)
@@ -291,7 +302,16 @@ func (s *Server) getExternalIP(bs *BuilderServer) (string, error) {
 
 // setFirewallRule allows ingress on WinRM port.
 func (s *Server) setFirewallRule(bs *BuilderServer) error {
-	list, err := s.service.Firewalls.List(s.projectID).Do()
+	var projectNetwork string
+	if s.vpcProjectID == "" {
+		projectNetwork = s.projectID
+	} else {
+		projectNetwork = s.vpcProjectID
+	}
+
+	log.Printf("Project Network in Firewall: %s", projectNetwork)
+
+	list, err := s.service.Firewalls.List(projectNetwork).Do()
 	if err != nil {
 		log.Printf("Could not list GCE firewalls: %+v", err)
 		return err
@@ -305,7 +325,7 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 
 	firewallRule := &compute.Firewall{
 		Allowed: []*compute.FirewallAllowed{
-			&compute.FirewallAllowed{
+			{
 				IPProtocol: "tcp",
 				Ports:      []string{"5986"},
 			},
@@ -313,9 +333,9 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 		Direction:    "INGRESS",
 		Name:         "allow-winrm-ingress",
 		SourceRanges: []string{"0.0.0.0/0"},
-		Network:      prefix + s.projectID + "/global/networks/" + *bs.VPC,
+		Network:      prefix + projectNetwork + "/global/networks/" + *bs.VPC,
 	}
-	_, err = s.service.Firewalls.Insert(s.projectID, firewallRule).Do()
+	_, err = s.service.Firewalls.Insert(projectNetwork, firewallRule).Do()
 	if err != nil {
 		log.Printf("Error setting firewall rule: %v", err)
 		return err
@@ -323,7 +343,7 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 	return nil
 }
 
-//WindowsPasswordConfig stores metadata to be sent to GCE.
+// WindowsPasswordConfig stores metadata to be sent to GCE.
 type WindowsPasswordConfig struct {
 	key      *rsa.PrivateKey
 	password string
@@ -334,7 +354,7 @@ type WindowsPasswordConfig struct {
 	ExpireOn time.Time `json:"expireOn"`
 }
 
-//WindowsPasswordResponse stores data received from GCE.
+// WindowsPasswordResponse stores data received from GCE.
 type WindowsPasswordResponse struct {
 	UserName          string `json:"userName"`
 	PasswordFound     bool   `json:"passwordFound"`
