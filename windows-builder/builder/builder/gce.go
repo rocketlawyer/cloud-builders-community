@@ -302,6 +302,13 @@ func (s *Server) getExternalIP(bs *BuilderServer) (string, error) {
 
 // setFirewallRule allows ingress on WinRM port.
 func (s *Server) setFirewallRule(bs *BuilderServer) error {
+	var projectNetwork string
+	if s.vpcProjectID == "" {
+		projectNetwork = s.projectID
+	} else {
+		projectNetwork = s.vpcProjectID
+	}
+
 	list, err := s.service.Firewalls.List(s.projectID).Do()
 	if err != nil {
 		log.Printf("Could not list GCE firewalls: %+v", err)
@@ -324,7 +331,7 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 		Direction:    "INGRESS",
 		Name:         "allow-winrm-ingress",
 		SourceRanges: []string{"0.0.0.0/0"},
-		Network:      prefix + s.projectID + "/global/networks/" + *bs.VPC,
+		Network:      prefix + projectNetwork + "/global/networks/" + *bs.VPC,
 	}
 	_, err = s.service.Firewalls.Insert(s.projectID, firewallRule).Do()
 	if err != nil {
