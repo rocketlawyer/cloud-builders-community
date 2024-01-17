@@ -309,6 +309,8 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 		projectNetwork = s.vpcProjectID
 	}
 
+	log.Printf("Project Network in Firewall: %s", projectNetwork)
+
 	list, err := s.service.Firewalls.List(s.projectID).Do()
 	if err != nil {
 		log.Printf("Could not list GCE firewalls: %+v", err)
