@@ -74,6 +74,7 @@ func NewServer(ctx context.Context, bs *BuilderServer) *Server {
 		return nil
 	}
 	s := &Server{projectID: projectID, vpcProjectID: *bs.NetworkProjectId}
+	log.Printf("ProjectID: %s, VPCProjectID: %s", s.projectID, s.vpcProjectID)
 
 	log.Printf("Starting GCE service in project %s", projectID)
 	err = s.newGCEService(ctx)
@@ -176,6 +177,8 @@ func (s *Server) newInstance(bs *BuilderServer) error {
 	} else {
 		projectNetwork = s.vpcProjectID
 	}
+
+	log.Printf("Project Network: %s", projectNetwork)
 
 	instance := &compute.Instance{
 		Name:        name,
