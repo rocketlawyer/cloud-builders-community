@@ -311,7 +311,7 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 
 	log.Printf("Project Network in Firewall: %s", projectNetwork)
 
-	list, err := s.service.Firewalls.List(s.projectID).Do()
+	list, err := s.service.Firewalls.List(projectNetwork).Do()
 	if err != nil {
 		log.Printf("Could not list GCE firewalls: %+v", err)
 		return err
@@ -325,7 +325,7 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 
 	firewallRule := &compute.Firewall{
 		Allowed: []*compute.FirewallAllowed{
-			&compute.FirewallAllowed{
+			{
 				IPProtocol: "tcp",
 				Ports:      []string{"5986"},
 			},
@@ -335,7 +335,7 @@ func (s *Server) setFirewallRule(bs *BuilderServer) error {
 		SourceRanges: []string{"0.0.0.0/0"},
 		Network:      prefix + projectNetwork + "/global/networks/" + *bs.VPC,
 	}
-	_, err = s.service.Firewalls.Insert(s.projectID, firewallRule).Do()
+	_, err = s.service.Firewalls.Insert(projectNetwork, firewallRule).Do()
 	if err != nil {
 		log.Printf("Error setting firewall rule: %v", err)
 		return err
